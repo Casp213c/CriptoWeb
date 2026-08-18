@@ -1,11 +1,11 @@
 {
   "name": "cryptoterminal-backend",
-  "version": "1.0.0",
-  "description": "Backend de autenticação, planos free/premium e cobrança Stripe para CryptoTerminal",
+  "version": "1.1.0",
+  "description": "Backend de autenticação, planos free/premium, admin e cobrança Stripe para CryptoTerminal",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "seed-admin": "node scripts/seed-admin.js"
   },
   "dependencies": {
     "express": "^4.19.2",
@@ -15,9 +15,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "stripe": "^16.9.0",
-    "express-rate-limit": "^7.4.0"
+    "express-rate-limit": "^7.4.0",
+    "resend": "^4.0.1"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  }
+  "engines": { "node": ">=18.0.0" }
 }

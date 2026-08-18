@@ -1,128 +1,164 @@
-# 🚀 CryptoTerminal Backend — Guia de Configuração
+# 🚀 CryptoTerminal Backend — Guia de Configuração (v1.1 — com Admin)
 
-Backend responsável por: cadastro/login de usuários, contador de análises gratuitas (3),
-assinatura Premium via Stripe (R$49,90/mês) e conformidade básica com a LGPD.
+## 🆕 Novidades desta versão
 
----
-
-## 📋 O que este backend faz
-
-- **Cadastro de usuário** com nome completo, ano de nascimento (valida 18+), telefone, CEP e email
-- **Login seguro** com senha criptografada (bcrypt) e token JWT
-- **Contador de análises**: usuários free têm direito a 3 análises de IA; depois disso, é bloqueado até assinar Premium
-- **Assinatura Stripe**: cobra R$49,90/mês recorrente, libera análises ilimitadas automaticamente
-- **Exclusão de conta (LGPD)**: endpoint para o usuário apagar todos os seus dados permanentemente
+- **Conta ADMIN geral criada automaticamente** no primeiro start, usando as variáveis
+  `ADMIN_EMAIL` e `ADMIN_PASSWORD` do `.env`
+- **Painel de administração** (`/admin/*`) — veja todos os usuários, dê premium de cortesia,
+  resete senhas, veja estatísticas de faturamento estimado
+- **Recuperação de senha** — dois métodos:
+  1. `/auth/reset-password` — você mesmo reseta via chave secreta (`RESET_SECRET_KEY`), sem precisar de admin logado
+  2. `/admin/users/:id/reset-password` — reset através do painel admin (requer login como admin)
 
 ---
 
-## 🛠️ Passo 1 — Criar conta no Stripe
+## 🔓 Recuperação de senha — QUALQUER usuário (fluxo normal via email)
 
-1. Acesse [dashboard.stripe.com](https://dashboard.stripe.com) e crie uma conta (gratuito)
-2. No menu lateral, vá em **Developers → API keys** e copie a **Secret key** (começa com `sk_test_` no modo teste)
-3. Vá em **Product catalog → Add product**:
-   - Nome: `CryptoTerminal Premium`
-   - Preço: `R$ 49,90` — marque **Recurring** → **Monthly**
-   - Salve e copie o **Price ID** (começa com `price_`)
-4. Ainda não configure o Webhook — isso é feito depois do deploy (passo 4)
+Esta é a solução definitiva para todos os usuários, não só você. Funciona assim:
+
+1. Usuário clica em **"Esqueci minha senha"** na tela de login do app
+2. Informa o email → backend gera um **token único válido por 1 hora** e envia por email (via Resend)
+3. Usuário clica no link do email → abre o app automaticamente na tela de **"Redefinir senha"**
+4. Define a nova senha → pronto, já pode fazer login
+
+### Configurar o envio de email (Resend — gratuito até 3.000 emails/mês)
+
+1. Crie uma conta em [resend.com](https://resend.com)
+2. Vá em **API Keys** → **Create API Key** → copie a chave (começa com `re_`)
+3. No Railway, adicione as variáveis:
+   ```
+   RESEND_API_KEY=re_xxxxxxxxxxxxx
+   EMAIL_FROM=CryptoTerminal <onboarding@resend.dev>
+   ```
+   O endereço `onboarding@resend.dev` já funciona sem configurar domínio — é o domínio de teste do Resend, ótimo para começar. Depois, se quiser um remetente com sua marca (`naoresponda@seudominio.com`), basta verificar seu domínio no painel do Resend e trocar o `EMAIL_FROM`.
+
+### ⚠️ Se você ainda NÃO configurou o Resend
+
+O sistema **não trava** — ele detecta que o `RESEND_API_KEY` não está configurado e, em vez de enviar
+email, devolve o link de reset diretamente na resposta da API (só em modo desenvolvimento/teste).
+O app mostra esse link num alerta na tela para você testar o fluxo completo sem precisar configurar
+email ainda. Assim que colocar a `RESEND_API_KEY`, o envio de verdade passa a funcionar automaticamente.
 
 ---
 
-## 🛠️ Passo 2 — Subir no Railway (recomendado, tem plano grátis)
+## 🔑 Sua conta administrador
 
-1. Acesse [railway.app](https://railway.app) e crie conta (pode usar GitHub)
-2. Clique **New Project → Deploy from GitHub repo** (ou **Empty Project** e depois arraste os arquivos)
-   - Se não tiver GitHub configurado ainda, pode usar **Railway CLI**: rode `npm install -g @railway/cli` no seu computador, depois `railway login` e `railway up` dentro da pasta do backend
-3. Após o primeiro deploy, vá em **Variables** e adicione todas as variáveis do arquivo `.env.example`:
+Já vem pré-configurada no `.env.example`:
 
 ```
-JWT_SECRET=            (gere uma string aleatória grande)
-STRIPE_SECRET_KEY=     (a sk_test_... do Stripe)
-STRIPE_WEBHOOK_SECRET= (vem no passo 4)
-STRIPE_PRICE_ID=       (o price_... do Stripe)
-FRONTEND_URL=          (seu link do Netlify, ex: https://cripto.netlify.app)
+ADMIN_EMAIL=cezar282010@hotmail.com
+ADMIN_PASSWORD=Qwerty123
+```
+
+⚠️ **IMPORTANTE:** Assim que fizer o primeiro login, troque essa senha por uma mais forte,
+usando `PUT /auth/change-password` ou o botão de trocar senha no app (quando implementado na UI).
+
+O admin tem automaticamente:
+- Análises **ilimitadas** (não conta como "premium" pago, é um bypass direto)
+- Acesso a `/admin/*` para gerenciar todos os usuários
+
+---
+
+## 🛠️ Deploy no Railway — passo a passo
+
+1. No Railway, confirme que o projeto já está conectado ao GitHub (você mencionou que já fez isso)
+2. Vá em **Variables** e adicione TODAS estas:
+
+```
+JWT_SECRET=              (string aleatória grande — peça pra mim gerar se quiser)
+RESET_SECRET_KEY=        (outra string aleatória grande, diferente da anterior)
+STRIPE_SECRET_KEY=       sk_test_...
+STRIPE_WEBHOOK_SECRET=   whsec_...
+STRIPE_PRICE_ID=         price_...
+FRONTEND_URL=            https://cripto.netlify.app
 FREE_ANALYSIS_LIMIT=3
+ADMIN_EMAIL=cezar282010@hotmail.com
+ADMIN_PASSWORD=Qwerty123
+ADMIN_NAME=Cezar (Admin Geral)
 ```
 
-4. O Railway vai gerar uma URL pública tipo `https://cryptoterminal-backend-production.up.railway.app` — **copie essa URL**, você vai precisar dela no PWA.
+3. Salve — o Railway faz redeploy automático
+4. Nos **logs** do Railway, procure por uma linha assim, confirmando que sua conta foi criada:
+   ```
+   ✅ Conta ADMIN criada: cezar282010@hotmail.com
+   👑 Admin: cezar282010@hotmail.com
+   ```
 
 ---
 
-## 🛠️ Passo 3 — Alternativa: Render (também gratuito)
+## 🔐 Como usar a recuperação de senha (endpoint de emergência)
 
-1. Acesse [render.com](https://render.com) → **New → Web Service**
-2. Conecte seu repositório ou faça upload manual
-3. Configure:
-   - **Build command**: `npm install`
-   - **Start command**: `npm start`
-4. Adicione as mesmas variáveis de ambiente do passo acima em **Environment**
+Se esquecer a senha de qualquer conta (inclusive a admin), rode isto (substitua a URL e valores):
 
----
+```bash
+curl -X POST https://SEU-BACKEND.up.railway.app/auth/reset-password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "cezar282010@hotmail.com",
+    "newPassword": "SuaNovaSenhaForte123",
+    "secretKey": "O_VALOR_QUE_VOCE_COLOCOU_EM_RESET_SECRET_KEY"
+  }'
+```
 
-## 🛠️ Passo 4 — Configurar o Webhook do Stripe (depois do deploy)
-
-Isso é essencial para o sistema saber quando alguém pagou.
-
-1. Volte ao [dashboard.stripe.com](https://dashboard.stripe.com) → **Developers → Webhooks → Add endpoint**
-2. URL do endpoint: `https://SEU-BACKEND-URL/billing/webhook`
-3. Selecione os eventos:
-   - `checkout.session.completed`
-   - `invoice.payment_succeeded`
-   - `customer.subscription.updated`
-   - `customer.subscription.deleted`
-4. Copie o **Signing secret** (começa com `whsec_`) e cole na variável `STRIPE_WEBHOOK_SECRET` no Railway/Render
+Isso funciona **sem precisar estar logado** — só quem sabe a `RESET_SECRET_KEY` consegue.
+Guarde essa chave em local seguro (gerenciador de senhas), pois ela é o "mestre" de recuperação.
 
 ---
 
-## 🔌 Passo 5 — Conectar o PWA ao backend
+## 👑 Endpoints do Painel Admin
 
-No arquivo `index.html` do seu PWA, será necessário adicionar a URL do backend
-(vou te enviar a versão atualizada do PWA já preparada para isso — é só trocar
-uma constante `API_URL` no topo do script pela URL do Railway/Render).
-
----
-
-## 📡 Endpoints disponíveis
+Todos exigem header `Authorization: Bearer SEU_TOKEN` (do login como admin).
 
 | Método | Rota | Descrição |
 |---|---|---|
-| POST | `/auth/register` | Cadastro (nome, nascimento, telefone, CEP, email, senha) |
-| POST | `/auth/login` | Login |
-| GET | `/auth/me` | Dados do usuário logado |
-| PUT | `/auth/me` | Atualizar nome/telefone/CEP |
-| DELETE | `/auth/me` | Excluir conta e dados (LGPD) |
-| GET | `/analysis/status` | Quantas análises restam |
-| POST | `/analysis/consume` | Consome 1 análise (bloqueia se limite atingido) |
-| POST | `/billing/create-checkout-session` | Gera link de pagamento Stripe |
-| POST | `/billing/create-portal-session` | Gera link para cancelar/gerenciar assinatura |
-| POST | `/billing/webhook` | Recebe eventos do Stripe (uso interno) |
+| GET | `/admin/users` | Lista todos os usuários cadastrados |
+| GET | `/admin/stats` | Total de usuários, premium, MRR estimado |
+| PUT | `/admin/users/:id/plan` | Muda plano manualmente (dar premium de cortesia) |
+| PUT | `/admin/users/:id/role` | Promove/rebaixa outro usuário a admin |
+| PUT | `/admin/users/:id/reset-password` | Reseta senha de qualquer usuário |
+| PUT | `/admin/users/:id/reset-analyses` | Zera contador de análises gratuitas |
+| DELETE | `/admin/users/:id` | Exclui uma conta (LGPD) |
+
+**Exemplo — ver todos os usuários:**
+```bash
+curl https://SEU-BACKEND.up.railway.app/admin/users \
+  -H "Authorization: Bearer SEU_TOKEN_DE_ADMIN"
+```
 
 ---
 
-## ✅ Testando localmente antes de subir
+## 📡 Endpoints gerais (não-admin)
+
+| Método | Rota | Descrição |
+|---|---|---|
+| POST | `/auth/register` | Cadastro |
+| POST | `/auth/login` | Login |
+| GET | `/auth/me` | Dados do usuário logado |
+| PUT | `/auth/me` | Atualizar nome/telefone/CEP |
+| PUT | `/auth/change-password` | Trocar a própria senha (logado) |
+| POST | `/auth/forgot-password` | Solicita link de recuperação por email (qualquer usuário) |
+| POST | `/auth/reset-with-token` | Define nova senha usando o token recebido por email |
+| POST | `/auth/reset-password` | Reset via chave secreta (uso admin/emergência, sem login) |
+| DELETE | `/auth/me` | Excluir conta (LGPD) |
+| GET | `/analysis/status` | Quantas análises restam |
+| POST | `/analysis/consume` | Consome 1 análise |
+| POST | `/billing/create-checkout-session` | Link de pagamento Stripe |
+| POST | `/billing/create-portal-session` | Gerenciar/cancelar assinatura |
+
+---
+
+## ✅ Testando localmente
 
 ```bash
 cd cryptobackend
 npm install
 cp .env.example .env
-# edite o .env com suas chaves de teste do Stripe
 npm start
 ```
 
-Teste com curl:
+Depois, teste o login admin:
 ```bash
-curl -X POST http://localhost:3000/auth/register \
+curl -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"fullName":"João Silva","birthYear":1990,"phone":"11987654321","postalCode":"01310-100","email":"joao@teste.com","password":"senha12345","acceptedTerms":true}'
+  -d '{"email":"cezar282010@hotmail.com","password":"Qwerty123"}'
 ```
-
----
-
-## ⚠️ Importante — LGPD
-
-Este backend já implementa os requisitos técnicos básicos (senha com hash, exclusão de dados,
-endpoint de resumo de privacidade), mas você **ainda precisa**:
-
-1. Publicar uma **Política de Privacidade** completa e um **Termos de Uso** (posso redigir um rascunho se quiser)
-2. Definir um email de contato para o titular dos dados exercer seus direitos
-3. Se for cobrar de muitos usuários, considerar registro como controlador de dados
-
